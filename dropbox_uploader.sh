@@ -39,6 +39,7 @@ SHOW_PROGRESSBAR=0
 SKIP_EXISTING_FILES=0
 ERROR_STATUS=0
 EXCLUDE=()
+RECENT_FILES=""
 
 #Don't edit these...
 API_OAUTH_TOKEN="https://api.dropbox.com/oauth2/token"
@@ -90,7 +91,7 @@ if [[ ! -d "$TMP_DIR" ]]; then
 fi
 
 #Look for optional config file parameter
-while getopts ":qpskdhf:x:" opt; do
+while getopts ":qpskdhf:x:r:" opt; do
     case $opt in
 
     f)
@@ -124,7 +125,9 @@ while getopts ":qpskdhf:x:" opt; do
     x)
       EXCLUDE+=( $OPTARG )
     ;;
-
+    r)
+      RECENT_FILES=$OPTARG
+    ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
       exit 1
@@ -138,6 +141,18 @@ while getopts ":qpskdhf:x:" opt; do
   esac
 done
 
+#Returns unix timestamp
+function utime
+{
+    date '+%s'
+}
+
+#Returns last modified file timestamp
+function mtime
+{
+    date '+%s' -r "$1"
+}
+
 if [[ $DEBUG != 0 ]]; then
     echo $VERSION
     uname -a 2> /dev/null
@@ -149,6 +164,12 @@ fi
 if [[ $CURL_BIN == "" ]]; then
     BIN_DEPS="$BIN_DEPS curl"
     CURL_BIN="curl"
+fi
+
+FILES_SINCE=0
+if [[ $RECENT_FILES != "" ]]; then
+    NOW=$(utime)
+    FILES_SINCE=$(($NOW - $RECENT_FILES))
 fi
 
 #Dependencies check
@@ -192,12 +213,6 @@ function print
     if [[ $QUIET == 0 ]]; then
 	    echo -ne "$1";
     fi
-}
-
-#Returns unix timestamp
-function utime
-{
-    date '+%s'
 }
 
 #Remove temporary files
@@ -288,6 +303,7 @@ function usage
     echo -e "\t-p            Show cURL progress meter"
     echo -e "\t-k            Doesn't check for SSL certificates (insecure)"
     echo -e "\t-x            Ignores/excludes directories or files from syncing. -x filename -x directoryname. example: -x .git"
+    echo -e "\t-r            Only include files that were modified within the last specified period, in seconds. example: -r 3600"
 
     echo -en "\nFor more info and examples, please see the README file.\n\n"
     remove_temp_files
@@ -484,6 +500,15 @@ function db_upload
         return
     fi
 
+    if [[ -f $SRC ]]; then
+        #Checking file modified time
+        FILE_MODIFIED=$(mtime "$FILE_SRC")
+        if [[ $FILE_MODIFIED < $FILES_SINCE ]]; then
+            print " > Skipping unmodified file \"$SRC\"\n"
+	    return
+        fi
+    fi
+
     TYPE=$(db_stat "$DST")
 
     #If DST it's a file, do nothing, it's the default behaviour
@@ -571,7 +596,6 @@ function db_upload_file
     else
         db_simple_upload_file "$FILE_SRC" "$FILE_DST"
     fi
-
 }
 
 #Simple file upload
