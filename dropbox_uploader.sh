@@ -502,7 +502,7 @@ function db_upload
 
     if [[ -f $SRC ]]; then
         #Checking file modified time
-        FILE_MODIFIED=$(mtime "$FILE_SRC")
+        FILE_MODIFIED=$(mtime "$SRC")
         if [[ $FILE_MODIFIED < $FILES_SINCE ]]; then
             print " > Skipping unmodified file \"$SRC\"\n"
 	    return
